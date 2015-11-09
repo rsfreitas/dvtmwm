@@ -1,0 +1,138 @@
+#!/usr/bin/python
+
+#
+# Description: Python script to handle 'dvtm' sessions.
+#
+
+import getopt
+import sys
+import tempfile
+import glob
+import commands
+import os
+import subprocess
+
+CREATE_SESSION = 1
+LIST_SESSIONS = 2
+ATTACH_SESSION = 3
+
+session_prefix = 'dvtm_wm_'
+
+def help():
+    print '''Usage: wm [OPTIONS]
+
+dvtm sessions managener.
+
+Options
+
+    -h          Show this help screen.
+    -l          List all active sessions.
+    -r [PID]    Resume a particular session.
+    -c          Create a new session.
+'''
+
+
+
+def create_session_filename():
+    t = tempfile.NamedTemporaryFile(prefix=session_prefix)
+    return t.name
+
+
+
+def has_any_session():
+    sf = glob.glob('/tmp/' + session_prefix + '*')
+
+    if len(sf) <= 0:
+        return False
+
+    return sf
+
+
+
+def get_session_pid(s):
+    return commands.getoutput('fuser %s' % s).split(':')[1].strip()
+
+
+
+def get_session_filename(spid):
+    return commands.getoutput('ps -p %s f | tail -n 1 | awk \'{print $7}\'' % spid)
+
+
+
+def get_all_pids(slist):
+    p = []
+
+    for s in slist:
+        p.append(get_session_pid(s))
+
+    return p
+
+
+
+def session(filename):
+    subprocess.call('dtach -A %s -r winch dvtm' % filename, shell=True)
+
+
+
+def create_session():
+    filename = create_session_filename()
+    session(filename)
+
+
+
+def list_sessions(slist):
+    for s in slist:
+        pid = get_session_pid(s)
+        print "Session [%s] - %s" % (pid, s)
+
+
+
+def attach(spid):
+    filename = get_session_filename(spid)
+    session(filename)
+
+
+
+def main():
+    action = CREATE_SESSION
+    optlist, args = getopt.getopt(sys.argv[1:], "hlr:c");
+
+    for o, a in optlist:
+        if o == '-h':
+            help()
+            return 1
+        elif o == '-l':
+            action = LIST_SESSIONS
+        elif o == '-r':
+            action = ATTACH_SESSION
+            s = a
+        elif o == '-c':
+            action = CREATE_SESSION
+
+    if action == CREATE_SESSION:
+        create_session()
+    elif action in (LIST_SESSIONS, ATTACH_SESSION):
+        slist = has_any_session()
+
+        if slist == False:
+            print "No active session!"
+            return -1
+
+        if action == LIST_SESSIONS:
+            list_sessions(slist)
+        elif action == ATTACH_SESSION:
+            if s in get_all_pids(slist):
+                attach(s)
+            else:
+                print "Unknown [%s] session" % s
+                return -2
+
+    return 0
+
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+
